@@ -261,8 +261,54 @@ def find_closest_vertex(vertex, graph, positions):
     return closest_vertex
 
 
-def find_inner_faces(remaining_cycles, identified_faces, sub_graph, sub_positions):
+def is_cycle_a_face(cycle, graph, positions):
+    if len(cycle) == 3:
+        return True
+    # cycle_path = mpltPath.Path(vertices=cycle_coordinates,
+    #                            codes=None,
+    #                            closed=True,
+    #                            readonly=True)
+    pass
 
+
+def get_cycle_edges(cycle, graph):
+    print(f"\ncycle {cycle}")
+    sub_graph = graph.copy()
+    remove_vertices = [node for node in graph.nodes if node not in cycle]
+    sub_graph.remove_nodes_from(remove_vertices)
+    edges = [frozenset(edge) for edge in sub_graph.edges]
+    degrees = {node: sub_graph.degree(node) for node in sub_graph.nodes}
+
+    print(degrees)
+    problem_nodes = set([node for node, degree in degrees.items() if degree > 2])
+    print(f"problem nodes: {problem_nodes}")
+    if len(problem_nodes) == 0:
+        return edges
+
+    for edge in edges:
+        if len(problem_nodes.intersection({edge})) < 2:
+            continue
+        print(f"investigating edge {edge}")
+        edge = list(edge)
+        sub_graph.remove_edge(u=edge[0], v=edge[1])
+        new_degrees = {node: sub_graph.degree(node) for node in sub_graph.nodes}
+        if any([degree < 2 for node, degree in new_degrees.items()]):
+            sub_graph.add_edge(u=edge[0], v=edge[1])
+        else:
+            degrees.update(new_degrees)
+            problem_nodes = set([node for node, degree in degrees.items() if degree > 2])
+    assert(all([degree == 2 for node, degree in degrees.items()])), "DEGREES ARE FUCKED"
+    edges = [frozenset(edge) for edge in sub_graph.edges]
+    return edges
+
+
+
+
+def find_inner_faces(identified_faces, sub_graph, sub_positions):
+    cycles = nx.minimum_cycle_basis(G=sub_graph)
+    for cycle in cycles:
+
+        pass
 
     pass
 
@@ -274,21 +320,17 @@ if __name__ == '__main__':
 
     # Simulate Graph
     graph = nx.barabasi_albert_graph(n=n_vertices, m=m_edges, seed=seed)
-
-    # Embed Graph  in 2D
     positions = nx.kamada_kawai_layout(G=graph)
-
-    #
     draw_graph(graph=graph, positions=positions, output_path="./graph.png")
 
     #
     edge_crossings, vertex_crossings = locate_edge_crossings(graph=graph, positions=positions)
     virtual_edge_set = planarize_graph(graph=graph, positions=positions, edge_crossings=edge_crossings)
-
     draw_graph(graph=graph, positions=positions, output_path="./planar_graph.png")
 
+    #
     connect_singleton_vertex_edges(graph=graph, positions=positions)
     draw_graph(graph=graph, positions=positions, output_path="./closed_graph.png")
 
     cycles = nx.minimum_cycle_basis(G=graph)
-    print(cycles)
+    [print(f"cycle {cycle} - {get_cycle_edges(cycle, graph)}") for cycle in cycles]
