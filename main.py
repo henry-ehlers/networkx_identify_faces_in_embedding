@@ -2,7 +2,7 @@ import sys
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-
+import copy
 
 def draw_graph(graph, positions, output_path, labels=None):
 
@@ -200,40 +200,23 @@ def squared_distance(point_a, point_b):
     return (x2 - x1) ** 2 + (y2 - y1) ** 2
 
 
-def find_closest_edge_intersection(edge_points, other_edges, graph, positions, must_be_real=False):
-    intersections, distances = dict(), dict()
-    point_a, point_b = edge_points
-    # print(f"Points a and b: {point_b} - {point_b}")
-    for edge in other_edges:
+def any_intersections(main_edge, edge_list, positions):
 
-        # Check whether the intersection is with a real edge
-        if must_be_real:
-            fields = graph.get_edge_data(v=edge[0], u=edge[1], default=None)
-            if fields:
-                if fields.get("real", 0) == 0:
-                    continue
-            else:
-                print(f"fields of edge {edge[0], edge[1]}: {fields}")  # todo: certain edges don't have data, which shouldn't happen
+    point_a, point_b = positions[main_edge[0]], positions[main_edge[1]]
+
+    # print(f"Points a and b: {point_b} - {point_b}")
+    for edge in edge_list:
+
+        if any([vertex in main_edge for vertex in edge]):
+            continue
 
         # Find
-        # print(f"current edge: {edge[0], edge[1]}")
         point_c, point_d = positions[edge[0]], positions[edge[1]]
-        # print(f"Points c and d: {point_c} - {point_d}")
         intersection = line_intersection(point_a, point_b, point_c, point_d)
-        if intersection is None:
-            continue
-        intersections[edge] = intersection
-        distances[edge] = squared_distance(point_a, intersection)
+        if intersection is not None:
+            return True
 
-    # If no intersection was found, return none
-    if len(intersections) == 0 and len(distances) == 0:
-        return None, None
-
-    # Find closest intersection
-    closest_intersection = min(distances, key=distances.get)
-
-    # Return the Edge Name, and it's intersection as a tuple
-    return closest_intersection, intersections[closest_intersection]
+    return False
 
 
 def find_closest_vertex(vertex, graph, positions):
@@ -241,22 +224,18 @@ def find_closest_vertex(vertex, graph, positions):
     edge_sets = [frozenset(edge) for edge in edge_list]
     distances = {node: float("inf") for node in graph.nodes}
     for node in graph.nodes:
+
         if node == vertex:
             continue
         if {node, vertex} in edge_sets:
             continue
 
-        hypothetical_edge = (positions[vertex], positions[node])
-        closest_intersection, intersections = find_closest_edge_intersection(edge_points=hypothetical_edge,
-                                                                             other_edges=edge_list,
-                                                                             graph=graph,
-                                                                             positions=positions)
-        if closest_intersection is not None:
+        if any_intersections(main_edge=(vertex, node), edge_list=edge_list, positions=positions):
             continue
 
         distances[node] = squared_distance(point_a=positions[vertex],
                                            point_b=positions[node])
-    print(distances)
+
     closest_vertex = min(distances, key=distances.get)
     return closest_vertex
 
@@ -272,19 +251,18 @@ def is_cycle_a_face(cycle, graph, positions):
 
 
 def get_cycle_edges(cycle, graph):
-    print(f"\ncycle {cycle}")
+
     sub_graph = graph.copy()
     remove_vertices = [node for node in graph.nodes if node not in cycle]
     sub_graph.remove_nodes_from(remove_vertices)
     edges = [frozenset(edge) for edge in sub_graph.edges]
     degrees = {node: sub_graph.degree(node) for node in sub_graph.nodes}
-
-    print(degrees)
     problem_nodes = set([node for node, degree in degrees.items() if degree > 2])
-    print(f"problem nodes: {problem_nodes}")
     if len(problem_nodes) == 0:
         return edges
-
+    print(f"\ncycle {cycle}")
+    print(f"problem nodes: {problem_nodes}")
+    print(nx.cycle_basis(G=sub_graph))
     for edge in edges:
         if len(problem_nodes.intersection({edge})) < 2:
             continue
@@ -292,7 +270,9 @@ def get_cycle_edges(cycle, graph):
         edge = list(edge)
         sub_graph.remove_edge(u=edge[0], v=edge[1])
         new_degrees = {node: sub_graph.degree(node) for node in sub_graph.nodes}
-        if any([degree < 2 for node, degree in new_degrees.items()]):
+        new_cycle_basis = nx.minimum_cycle_basis(G=sub_graph)
+        print(f"new cycle basis: {new_cycle_basis}")
+        if any([degree < 2 for node, degree in new_degrees.items()]) or len(new_cycle_basis) > 1:
             sub_graph.add_edge(u=edge[0], v=edge[1])
         else:
             degrees.update(new_degrees)
@@ -302,6 +282,58 @@ def get_cycle_edges(cycle, graph):
     return edges
 
 
+def order_cycle_vertices(cycle, graph):
+    cycle_edges = get_cycle_edges(cycle=cycle, graph=graph)
+    ordered_cycle_edges = get_ordered_edges(edges=cycle_edges)
+    vertex_sequence = get_vertex_sequence(edges=ordered_cycle_edges, is_ordered=True)
+    return vertex_sequence
+
+
+def get_ordered_edges(edges, first_node=None):
+
+    edges = [tuple(edge) for edge in edges]
+
+    #
+    start_index = 0 if first_node is None \
+        else [i for i in range(0, len(edges)) if edges[i][0] == first_node or edges[i][1] == first_node][0]
+
+    #
+    sorted_edges = [(None, None)] * len(edges)
+    sorted_edges[0] = edges[start_index]
+
+    #
+    for i in range(1, len(edges)):
+        for edge in edges:
+            if edge[0] == sorted_edges[i-1][1] and (edge[0], edge[1] not in sorted_edges):
+                sorted_edges[i] = edge
+                continue
+            elif edge[1] == sorted_edges[i-1][1] and (edge[1], edge[0] not in sorted_edges):
+                sorted_edges[i] = (edge[1], edge[0])
+                continue
+
+    #
+    return sorted_edges
+
+
+def place_virtual_midpoints(graph, positions, start_index=None):
+    start_index = start_index if start_index is not None else max(graph.nodes()) + 1
+    for index, (node_a, node_b) in enumerate(copy.deepcopy(graph.edges)):
+        new_vertex = start_index + index
+        positions[new_vertex] = calculate_midpoint(positions[node_a], positions[node_b])
+        graph.add_edge(u_of_edge=node_a, v_of_edge=new_vertex)
+        graph.add_edge(u_of_edge=node_b, v_of_edge=new_vertex)
+        graph.remove_edge(v=node_a, u=node_b)
+
+
+def calculate_midpoint(point_a, point_b):
+    return (point_a[0] + point_b[0])/2.0, (point_a[1] + point_b[1])/2.0
+
+
+def get_vertex_sequence(edges, first_node=None, is_ordered=False):
+    if not is_ordered:
+        edges = get_ordered_edges(edges=edges, first_node=first_node)
+    vertex_sequence = [edge[0] for edge in edges] + [edges[-1][1]]
+    return vertex_sequence
 
 
 def find_inner_faces(identified_faces, sub_graph, sub_positions):
@@ -323,14 +355,22 @@ if __name__ == '__main__':
     positions = nx.kamada_kawai_layout(G=graph)
     draw_graph(graph=graph, positions=positions, output_path="./graph.png")
 
-    #
+    # Planarize Graph by removing edge crossings and replacing them with virtual vertices
     edge_crossings, vertex_crossings = locate_edge_crossings(graph=graph, positions=positions)
     virtual_edge_set = planarize_graph(graph=graph, positions=positions, edge_crossings=edge_crossings)
     draw_graph(graph=graph, positions=positions, output_path="./planar_graph.png")
+    print(graph.edges(3))
 
     #
     connect_singleton_vertex_edges(graph=graph, positions=positions)
+    labels = {vertex: vertex for vertex in graph.nodes}
     draw_graph(graph=graph, positions=positions, output_path="./closed_graph.png")
+    print(graph.edges(3))
 
+    #
+    place_virtual_midpoints(graph=graph, positions=positions)
+    draw_graph(graph=graph, positions=positions, labels=labels, output_path="./expanded_graph.png")
+    print(graph.edges(3))
     cycles = nx.minimum_cycle_basis(G=graph)
-    [print(f"cycle {cycle} - {get_cycle_edges(cycle, graph)}") for cycle in cycles]
+    print(cycles)
+    [print(f"cycle {cycle}") for cycle in cycles]
