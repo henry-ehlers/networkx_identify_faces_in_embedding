@@ -310,25 +310,38 @@ def get_vertex_sequence(edges, is_ordered=False):
 
 
 def is_cycle_empty(ordered_cycle, graph, positions):
-    # print(f"\nordered cycle: {ordered_cycle}")
+
+    #
     ordered_cycle_closed = ordered_cycle + [ordered_cycle[0]]
-    # print(f"ordered_cycle_closed: {ordered_cycle_closed}")
     ordered_coordinates = [positions[cycle_node] for cycle_node in ordered_cycle_closed]
-    # print(f"ordered_coordinates: {ordered_coordinates}")
-    cycle_path = mpltPath.Path(vertices=ordered_coordinates,
-                               codes=None,
-                               closed=True,
-                               readonly=True)
+
+    #
+    cycle_path = mpltPath.Path(vertices=ordered_coordinates, codes=None, closed=True, readonly=True)
 
     remaining_nodes = [node for node in graph.nodes if node not in ordered_cycle]
-    # print(f"remaining nodes {remaining_nodes}")
     in_side = cycle_path.contains_points([positions[node] for node in remaining_nodes])
-    [print(f"node {node} inside {ordered_cycle}") for index, node in enumerate(remaining_nodes) if in_side[index]]
+
+    #
     return any(in_side)
+
+
+def count_cycle_per_edge(cycles, graph):
+    edge_counts = {frozenset(edge): 0 for edge in graph.edges}
+    for cycle in cycles:
+        cycle_edges = get_cycle_edges(cycle=cycle, graph=graph)
+        for edge in cycle_edges:
+            edge_counts[edge] += 1
+    return edge_counts
+
+
+def get_faces(cycles, graph, positions):
+    pass
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
+
+    #
     cmd_args = sys.argv
     n_vertices, m_edges, seed = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
 
@@ -341,23 +354,29 @@ if __name__ == '__main__':
     edge_crossings, vertex_crossings = locate_edge_crossings(graph=graph, positions=positions)
     virtual_edge_set = planarize_graph(graph=graph, positions=positions, edge_crossings=edge_crossings)
     draw_graph(graph=graph, positions=positions, output_path="./planar_graph.png")
-    print(graph.edges(3))
 
     #
     connect_singleton_vertex_edges(graph=graph, positions=positions)
     labels = {vertex: vertex for vertex in graph.nodes}
     draw_graph(graph=graph, positions=positions, output_path="./closed_graph.png")
-    print(graph.edges(3))
 
     #
     place_virtual_midpoints(graph=graph, positions=positions)
     draw_graph(graph=graph, positions=positions, output_path="./expanded_graph.png")
-    print(graph.edges(3))
     cycles = nx.minimum_cycle_basis(G=graph)
-    print(cycles)
     [print(f"cycle {cycle} - edges {order_cycle_vertices(cycle, graph)}") for cycle in cycles]
 
+    #
     problems = [cycle for cycle in cycles if is_cycle_empty(order_cycle_vertices(cycle, graph), graph, positions)]
     print(f"problems: {problems}")
-    for problem in problems:
-        print(f"problem: {problem}")
+
+    # Check Face Edge Counts
+    edge_counts = count_cycle_per_edge(cycles=cycles, graph=graph)
+    for edge, count in edge_counts.items():
+        if count == 2:
+            edge = set(edge)
+            graph.remove_edge(u=edge.pop(), v=edge.pop())
+    draw_graph(graph=graph, positions=positions, output_path="./outer_graph.png")
+
+    # Return Faces
+
