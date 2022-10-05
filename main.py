@@ -11,7 +11,7 @@ def draw_graph(graph, positions, output_path, labels=None):
     # Draw Graph Embedding
     plt.figure(3, figsize=(20, 20))
     nx.draw(G=graph, pos=positions, node_shape='o', node_size=75)
-    nx.draw_networkx_labels(G=graph, pos=positions, labels=labels, font_size=50)
+    nx.draw_networkx_labels(G=graph, pos=positions, labels=labels, font_size=40)
     plt.savefig(fname=output_path, dpi=300)
     plt.clf()
 
@@ -252,64 +252,47 @@ def is_cycle_a_face(cycle, graph, positions):
 
 def get_cycle_edges(cycle, graph):
 
+    # Extract Subgraph of only the vertices of the cycle
     sub_graph = graph.copy()
-    remove_vertices = [node for node in graph.nodes if node not in cycle]
-    sub_graph.remove_nodes_from(remove_vertices)
-    edges = [frozenset(edge) for edge in sub_graph.edges]
+    sub_graph.remove_nodes_from([node for node in graph.nodes if node not in cycle])
+
+    # Count the degree of all vertices in the subgraph.
     degrees = {node: sub_graph.degree(node) for node in sub_graph.nodes}
     problem_nodes = set([node for node, degree in degrees.items() if degree > 2])
-    if len(problem_nodes) == 0:
-        return edges
-    print(f"\ncycle {cycle}")
-    print(f"problem nodes: {problem_nodes}")
-    print(nx.cycle_basis(G=sub_graph))
-    for edge in edges:
-        if len(problem_nodes.intersection({edge})) < 2:
-            continue
-        print(f"investigating edge {edge}")
-        edge = list(edge)
-        sub_graph.remove_edge(u=edge[0], v=edge[1])
-        new_degrees = {node: sub_graph.degree(node) for node in sub_graph.nodes}
-        new_cycle_basis = nx.minimum_cycle_basis(G=sub_graph)
-        print(f"new cycle basis: {new_cycle_basis}")
-        if any([degree < 2 for node, degree in new_degrees.items()]) or len(new_cycle_basis) > 1:
-            sub_graph.add_edge(u=edge[0], v=edge[1])
-        else:
-            degrees.update(new_degrees)
-            problem_nodes = set([node for node, degree in degrees.items() if degree > 2])
-    assert(all([degree == 2 for node, degree in degrees.items()])), "DEGREES ARE FUCKED"
-    edges = [frozenset(edge) for edge in sub_graph.edges]
-    return edges
+    assert (len(problem_nodes) == 0), f"Not all vertices have degree of two: {problem_nodes}"
+
+    # Return Edges as list of frozensets
+    return [frozenset(edge) for edge in sub_graph.edges]
 
 
 def order_cycle_vertices(cycle, graph):
     cycle_edges = get_cycle_edges(cycle=cycle, graph=graph)
     ordered_cycle_edges = get_ordered_edges(edges=cycle_edges)
+    print(f"ordered edges: {ordered_cycle_edges}")
     vertex_sequence = get_vertex_sequence(edges=ordered_cycle_edges, is_ordered=True)
     return vertex_sequence
 
 
-def get_ordered_edges(edges, first_node=None):
+def get_ordered_edges(edges):
 
     edges = [tuple(edge) for edge in edges]
 
     #
-    start_index = 0 if first_node is None \
-        else [i for i in range(0, len(edges)) if edges[i][0] == first_node or edges[i][1] == first_node][0]
-
-    #
     sorted_edges = [(None, None)] * len(edges)
-    sorted_edges[0] = edges[start_index]
+    sorted_edges[0] = edges[0]
+    visited_edges = [{edges[0]}]
 
     #
     for i in range(1, len(edges)):
         for edge in edges:
+            if {edge} in visited_edges:
+                continue
             if edge[0] == sorted_edges[i-1][1] and (edge[0], edge[1] not in sorted_edges):
                 sorted_edges[i] = edge
-                continue
+                visited_edges.append({edge})
             elif edge[1] == sorted_edges[i-1][1] and (edge[1], edge[0] not in sorted_edges):
                 sorted_edges[i] = (edge[1], edge[0])
-                continue
+                visited_edges.append({edge})
 
     #
     return sorted_edges
@@ -369,8 +352,8 @@ if __name__ == '__main__':
 
     #
     place_virtual_midpoints(graph=graph, positions=positions)
-    draw_graph(graph=graph, positions=positions, labels=labels, output_path="./expanded_graph.png")
+    draw_graph(graph=graph, positions=positions, output_path="./expanded_graph.png")
     print(graph.edges(3))
     cycles = nx.minimum_cycle_basis(G=graph)
     print(cycles)
-    [print(f"cycle {cycle}") for cycle in cycles]
+    [print(f"cycle {cycle} - edges {order_cycle_vertices(cycle, graph)}") for cycle in cycles]
