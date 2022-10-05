@@ -1,4 +1,5 @@
 import sys
+import matplotlib.path as mpltPath
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -240,16 +241,6 @@ def find_closest_vertex(vertex, graph, positions):
     return closest_vertex
 
 
-def is_cycle_a_face(cycle, graph, positions):
-    if len(cycle) == 3:
-        return True
-    # cycle_path = mpltPath.Path(vertices=cycle_coordinates,
-    #                            codes=None,
-    #                            closed=True,
-    #                            readonly=True)
-    pass
-
-
 def get_cycle_edges(cycle, graph):
 
     # Extract Subgraph of only the vertices of the cycle
@@ -268,7 +259,6 @@ def get_cycle_edges(cycle, graph):
 def order_cycle_vertices(cycle, graph):
     cycle_edges = get_cycle_edges(cycle=cycle, graph=graph)
     ordered_cycle_edges = get_ordered_edges(edges=cycle_edges)
-    print(f"ordered edges: {ordered_cycle_edges}")
     vertex_sequence = get_vertex_sequence(edges=ordered_cycle_edges, is_ordered=True)
     return vertex_sequence
 
@@ -312,20 +302,28 @@ def calculate_midpoint(point_a, point_b):
     return (point_a[0] + point_b[0])/2.0, (point_a[1] + point_b[1])/2.0
 
 
-def get_vertex_sequence(edges, first_node=None, is_ordered=False):
-    if not is_ordered:
-        edges = get_ordered_edges(edges=edges, first_node=first_node)
-    vertex_sequence = [edge[0] for edge in edges] + [edges[-1][1]]
+def get_vertex_sequence(edges, is_ordered=False):
+    edges = get_ordered_edges(edges=edges) if not is_ordered else edges
+    vertex_sequence = [edge[0] for edge in edges]
     return vertex_sequence
 
 
-def find_inner_faces(identified_faces, sub_graph, sub_positions):
-    cycles = nx.minimum_cycle_basis(G=sub_graph)
-    for cycle in cycles:
+def is_cycle_empty(ordered_cycle, graph, positions):
+    # print(f"\nordered cycle: {ordered_cycle}")
+    ordered_cycle_closed = ordered_cycle + [ordered_cycle[0]]
+    # print(f"ordered_cycle_closed: {ordered_cycle_closed}")
+    ordered_coordinates = [positions[cycle_node] for cycle_node in ordered_cycle_closed]
+    # print(f"ordered_coordinates: {ordered_coordinates}")
+    cycle_path = mpltPath.Path(vertices=ordered_coordinates,
+                               codes=None,
+                               closed=True,
+                               readonly=True)
 
-        pass
-
-    pass
+    remaining_nodes = [node for node in graph.nodes if node not in ordered_cycle]
+    # print(f"remaining nodes {remaining_nodes}")
+    in_side = cycle_path.contains_points([positions[node] for node in remaining_nodes])
+    # print(f"inside: {in_side}")
+    return any(in_side)
 
 
 # Press the green button in the gutter to run the script.
@@ -357,3 +355,5 @@ if __name__ == '__main__':
     cycles = nx.minimum_cycle_basis(G=graph)
     print(cycles)
     [print(f"cycle {cycle} - edges {order_cycle_vertices(cycle, graph)}") for cycle in cycles]
+
+    [is_cycle_empty(cycle, graph, positions) for cycle in cycles]
