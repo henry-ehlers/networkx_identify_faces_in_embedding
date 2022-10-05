@@ -10,9 +10,9 @@ def draw_graph(graph, positions, output_path, labels=None):
     # node_shape_map = shape_split_vertices(graph)  # CAN ONLY BE IMPLEMEMENTED USING MULTIPLE PASSES
 
     # Draw Graph Embedding
-    plt.figure(3, figsize=(20, 20))
-    nx.draw(G=graph, pos=positions, node_shape='o', node_size=75)
-    nx.draw_networkx_labels(G=graph, pos=positions, labels=labels, font_size=40)
+    plt.figure(3, figsize=(30, 30))
+    nx.draw(G=graph, pos=positions, node_shape='o', node_size=25)
+    nx.draw_networkx_labels(G=graph, pos=positions, labels=labels, font_size=15)
     plt.savefig(fname=output_path, dpi=300)
     plt.clf()
 
@@ -78,6 +78,7 @@ def sort_vertices_along_edge(edge, vertex_set, positions):
 
     # Return sorted vertex indices
     return sorted_vertices
+
 
 def add_virtual_edges(graph, positions, edge_to_virtual_vertex):
 
@@ -322,7 +323,7 @@ def is_cycle_empty(ordered_cycle, graph, positions):
     remaining_nodes = [node for node in graph.nodes if node not in ordered_cycle]
     # print(f"remaining nodes {remaining_nodes}")
     in_side = cycle_path.contains_points([positions[node] for node in remaining_nodes])
-    # print(f"inside: {in_side}")
+    [print(f"node {node} inside {ordered_cycle}") for index, node in enumerate(remaining_nodes) if in_side[index]]
     return any(in_side)
 
 
@@ -356,4 +357,7 @@ if __name__ == '__main__':
     print(cycles)
     [print(f"cycle {cycle} - edges {order_cycle_vertices(cycle, graph)}") for cycle in cycles]
 
-    [is_cycle_empty(cycle, graph, positions) for cycle in cycles]
+    problems = [cycle for cycle in cycles if is_cycle_empty(order_cycle_vertices(cycle, graph), graph, positions)]
+    print(f"problems: {problems}")
+    for problem in problems:
+        print(f"problem: {problem}")
