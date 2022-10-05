@@ -11,11 +11,7 @@ def draw_graph(graph, positions, output_path, labels=None):
     # Draw Graph Embedding
     plt.figure(3, figsize=(20, 20))
     nx.draw(G=graph, pos=positions, node_shape='o', node_size=75)
-    if labels is not None:
-        nx.draw_networkx_labels(G=graph, pos=positions, labels=labels, font_size=15)
-    else:
-        nx.draw_networkx_labels(G=graph, pos=positions, font_size=15)
-
+    nx.draw_networkx_labels(G=graph, pos=positions, labels=labels, font_size=50)
     plt.savefig(fname=output_path, dpi=300)
     plt.clf()
 
@@ -184,6 +180,87 @@ def line_intersection(p1, p2, p3, p4):
     y = y1 + ua * (y2 - y1)
     return x, y
 
+
+def connect_singleton_vertex_edges(graph, positions):
+
+    for vertex in graph.nodes:
+        if graph.degree(vertex) != 1:
+            continue
+        closest_target_vertex = find_closest_vertex(vertex, graph, positions)
+        graph.add_edge(u_of_edge=vertex,
+                       v_of_edge=closest_target_vertex,
+                       virtual=1)
+        print(f"connected {vertex} to {closest_target_vertex}")
+        return connect_singleton_vertex_edges(graph, positions)
+
+
+def squared_distance(point_a, point_b):
+    (x1, y1) = point_a
+    (x2, y2) = point_b
+    return (x2 - x1) ** 2 + (y2 - y1) ** 2
+
+
+def find_closest_edge_intersection(edge_points, other_edges, graph, positions, must_be_real=False):
+    intersections, distances = dict(), dict()
+    point_a, point_b = edge_points
+    # print(f"Points a and b: {point_b} - {point_b}")
+    for edge in other_edges:
+
+        # Check whether the intersection is with a real edge
+        if must_be_real:
+            fields = graph.get_edge_data(v=edge[0], u=edge[1], default=None)
+            if fields:
+                if fields.get("real", 0) == 0:
+                    continue
+            else:
+                print(f"fields of edge {edge[0], edge[1]}: {fields}")  # todo: certain edges don't have data, which shouldn't happen
+
+        # Find
+        # print(f"current edge: {edge[0], edge[1]}")
+        point_c, point_d = positions[edge[0]], positions[edge[1]]
+        # print(f"Points c and d: {point_c} - {point_d}")
+        intersection = line_intersection(point_a, point_b, point_c, point_d)
+        if intersection is None:
+            continue
+        intersections[edge] = intersection
+        distances[edge] = squared_distance(point_a, intersection)
+
+    # If no intersection was found, return none
+    if len(intersections) == 0 and len(distances) == 0:
+        return None, None
+
+    # Find closest intersection
+    closest_intersection = min(distances, key=distances.get)
+
+    # Return the Edge Name, and it's intersection as a tuple
+    return closest_intersection, intersections[closest_intersection]
+
+
+def find_closest_vertex(vertex, graph, positions):
+    edge_list = [edge for edge in graph.edges()]
+    edge_sets = [frozenset(edge) for edge in edge_list]
+    distances = {node: float("inf") for node in graph.nodes}
+    for node in graph.nodes:
+        if node == vertex:
+            continue
+        if {node, vertex} in edge_sets:
+            continue
+
+        hypothetical_edge = (positions[vertex], positions[node])
+        closest_intersection, intersections = find_closest_edge_intersection(edge_points=hypothetical_edge,
+                                                                             other_edges=edge_list,
+                                                                             graph=graph,
+                                                                             positions=positions)
+        if closest_intersection is not None:
+            continue
+
+        distances[node] = squared_distance(point_a=positions[vertex],
+                                           point_b=positions[node])
+    print(distances)
+    closest_vertex = min(distances, key=distances.get)
+    return closest_vertex
+
+
 def find_inner_faces(remaining_cycles, identified_faces, sub_graph, sub_positions):
 
 
@@ -209,6 +286,9 @@ if __name__ == '__main__':
     virtual_edge_set = planarize_graph(graph=graph, positions=positions, edge_crossings=edge_crossings)
 
     draw_graph(graph=graph, positions=positions, output_path="./planar_graph.png")
+
+    connect_singleton_vertex_edges(graph=graph, positions=positions)
+    draw_graph(graph=graph, positions=positions, output_path="./closed_graph.png")
 
     cycles = nx.minimum_cycle_basis(G=graph)
     print(cycles)
