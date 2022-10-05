@@ -334,8 +334,12 @@ def count_cycle_per_edge(cycles, graph):
     return edge_counts
 
 
-def get_faces(cycles, graph, positions):
-    pass
+def get_faces(cycles, original_vertices, graph):
+    ordered_faces = []
+    for cycle in cycles:
+        ordered_cycle_vertices = order_cycle_vertices(cycle=cycle, graph=graph)
+        ordered_faces.append([vertex for vertex in ordered_cycle_vertices if vertex in original_vertices])
+    return ordered_faces
 
 
 # Press the green button in the gutter to run the script.
@@ -346,37 +350,46 @@ if __name__ == '__main__':
     n_vertices, m_edges, seed = int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3])
 
     # Simulate Graph
-    graph = nx.barabasi_albert_graph(n=n_vertices, m=m_edges, seed=seed)
-    positions = nx.kamada_kawai_layout(G=graph)
-    draw_graph(graph=graph, positions=positions, output_path="./graph.png")
+    original_graph = nx.barabasi_albert_graph(n=n_vertices, m=m_edges, seed=seed)
+    original_positions = nx.kamada_kawai_layout(G=original_graph)
+    draw_graph(graph=original_graph, positions=original_positions, output_path="./graph.png")
 
     # Planarize Graph by removing edge crossings and replacing them with virtual vertices
-    edge_crossings, vertex_crossings = locate_edge_crossings(graph=graph, positions=positions)
-    virtual_edge_set = planarize_graph(graph=graph, positions=positions, edge_crossings=edge_crossings)
-    draw_graph(graph=graph, positions=positions, output_path="./planar_graph.png")
+    planar_graph, planar_positions = copy.deepcopy(original_graph), copy.deepcopy(original_positions)
+    edge_crossings, vertex_crossings = locate_edge_crossings(graph=original_graph, positions=original_positions)
+    virtual_edge_set = planarize_graph(graph=planar_graph, positions=planar_positions, edge_crossings=edge_crossings)
+    draw_graph(graph=planar_graph, positions=planar_positions, output_path="./planar_graph.png")
 
     #
-    connect_singleton_vertex_edges(graph=graph, positions=positions)
-    labels = {vertex: vertex for vertex in graph.nodes}
-    draw_graph(graph=graph, positions=positions, output_path="./closed_graph.png")
+    cyclical_graph, cyclical_positions = copy.deepcopy(planar_graph), copy.deepcopy(planar_positions)
+    connect_singleton_vertex_edges(graph=cyclical_graph, positions=cyclical_positions)
+    planar_vertices = [vertex for vertex in cyclical_graph.nodes]
+    labels = {vertex: vertex for vertex in cyclical_graph.nodes}
+    draw_graph(graph=cyclical_graph, positions=cyclical_positions, output_path="./closed_graph.png")
 
     #
-    place_virtual_midpoints(graph=graph, positions=positions)
-    draw_graph(graph=graph, positions=positions, output_path="./expanded_graph.png")
-    cycles = nx.minimum_cycle_basis(G=graph)
-    [print(f"cycle {cycle} - edges {order_cycle_vertices(cycle, graph)}") for cycle in cycles]
+    midpoint_graph, midpoint_positions = copy.deepcopy(cyclical_graph), copy.deepcopy(cyclical_positions)
+    place_virtual_midpoints(graph=midpoint_graph, positions=midpoint_positions)
+    draw_graph(graph=midpoint_graph, positions=midpoint_positions, output_path="./expanded_graph.png")
+    cycles = nx.minimum_cycle_basis(G=midpoint_graph)
+    [print(f"cycle {cycle} - edges {order_cycle_vertices(cycle, midpoint_graph)}") for cycle in cycles]
 
     #
-    problems = [cycle for cycle in cycles if is_cycle_empty(order_cycle_vertices(cycle, graph), graph, positions)]
+    problems = [cycle for cycle in cycles if is_cycle_empty(order_cycle_vertices(cycle, midpoint_graph), midpoint_graph, midpoint_positions)]
     print(f"problems: {problems}")
 
     # Check Face Edge Counts
-    edge_counts = count_cycle_per_edge(cycles=cycles, graph=graph)
+    outer_graph, outer_positions = copy.deepcopy(midpoint_graph), copy.deepcopy(midpoint_positions)
+    edge_counts = count_cycle_per_edge(cycles=cycles, graph=outer_graph)
     for edge, count in edge_counts.items():
         if count == 2:
             edge = set(edge)
-            graph.remove_edge(u=edge.pop(), v=edge.pop())
-    draw_graph(graph=graph, positions=positions, output_path="./outer_graph.png")
+            outer_graph.remove_edge(u=edge.pop(), v=edge.pop())
+    draw_graph(graph=outer_graph, positions=outer_positions, output_path="./outer_graph.png")
 
     # Return Faces
+    ordered_face_vertices = get_faces(cycles=cycles, original_vertices=planar_vertices, graph=midpoint_graph)
+    print(f"Identified the following {len(ordered_face_vertices)} faces:")
+    [print(f"face: {face}") for face in ordered_face_vertices]
+
 
