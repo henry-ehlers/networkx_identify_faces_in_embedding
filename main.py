@@ -443,24 +443,20 @@ if __name__ == '__main__':
     face_vertices = list(planar_graph.nodes)
     draw_graph(graph=planar_graph, positions=planar_positions, output_path="./planar_graph.png")
 
-    #
+    # Add virtual edge to bridge-vertices to ensure all vertices can be a part of a cycle
     cyclical_graph, cyclical_positions = copy.deepcopy(planar_graph), copy.deepcopy(planar_positions)
     connect_singleton_vertex_edges(graph=cyclical_graph, positions=cyclical_positions)
-    planar_vertices = [vertex for vertex in cyclical_graph.nodes]
     labels = {vertex: vertex for vertex in cyclical_graph.nodes}
     draw_graph(graph=cyclical_graph, positions=cyclical_positions, output_path="./closed_graph.png")
 
-    #
+    # Create midpoint graph by replacing all edges with two virtual edges with a vertex at its center
     midpoint_graph, midpoint_positions = copy.deepcopy(cyclical_graph), copy.deepcopy(cyclical_positions)
     place_virtual_midpoints(graph=midpoint_graph, positions=midpoint_positions)
     draw_graph(graph=midpoint_graph, positions=midpoint_positions, output_path="./expanded_graph.png")
-    cycles = nx.minimum_cycle_basis(G=midpoint_graph)
-    [print(f"cycle {cycle} - edges {order_cycle_vertices(cycle, midpoint_graph)}") for cycle in cycles]
 
     # Identify Faces from Cycles
     identified_faces = set()
     identify_faces(faces=identified_faces, graph=midpoint_graph, positions=midpoint_positions)
-    print(f"identified faces: {identified_faces}")
 
     # Check Face Edge Counts
     outer_graph, outer_positions = copy.deepcopy(midpoint_graph), copy.deepcopy(midpoint_positions)
@@ -473,11 +469,8 @@ if __name__ == '__main__':
 
     # Identify Each Face's Ordered Edge and Node List from the mid-point graph
     unsorted_edges = {face: get_cycle_edges(cycle=face, graph=midpoint_graph) for face in identified_faces}
-    print(f"unsorted edges: {unsorted_edges}")
     ordered_edges = {face: get_ordered_edges(unsorted_edges.get(face)) for face in identified_faces}
-    print(f"sorted edges: {ordered_edges}")
     ordered_nodes = {face: get_vertex_sequence(edges=ordered_edges[face], is_ordered=True) for face in identified_faces}
-    print(f"ordered edges: {ordered_nodes}")
 
     # Clean up Sorted Vertex and Edge lists from midpoint vertices
     sorted_faces = get_sorted_face_vertices_from_cycle(ordered_cycle_nodes=ordered_nodes,
