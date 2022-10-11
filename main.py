@@ -235,8 +235,7 @@ def find_closest_vertex(vertex, graph, positions):
         if any_intersections(main_edge=(vertex, node), edge_list=edge_list, positions=positions):
             continue
 
-        distances[node] = squared_distance(point_a=positions[vertex],
-                                           point_b=positions[node])
+        distances[node] = squared_distance(point_a=positions[vertex], point_b=positions[node])
 
     closest_vertex = min(distances, key=distances.get)
     return closest_vertex
@@ -342,6 +341,89 @@ def get_faces(cycles, original_vertices, graph):
     return ordered_faces
 
 
+def count_cycles_edge(cycle_edges, graph):
+    graph_edge_counts = {frozenset(edge): 0 for edge in graph.edges}
+    for cycle, cycle_edges in cycle_edges.items():
+        for cycle_edge in cycle_edges:
+            cycle_edge = frozenset(cycle_edge)
+            if cycle_edge in graph_edge_counts.keys():
+                graph_edge_counts[cycle_edge] += 1
+    return graph_edge_counts
+
+
+def prune_cycle_graph(cycle_edges, graph):
+    edge_counts = count_cycles_edge(cycle_edges, graph)
+    # TODO: since we are checking against ALL cycles, it is indeed possible for one edge to map MORE than twice
+    #  these are incorrect cycles (i.e. not faces), hence the messy mapping
+    mapped_edges = [tuple(edge) for edge, count in edge_counts.items() if count == 2]
+    [print(f"{edge} - {count}") for edge, count in edge_counts.items()]
+    input("COUNTS ARE FUCKED")
+    graph.remove_edges_from(mapped_edges)
+
+
+def get_nodes_in_cycle(ordered_cycle, graph, positions):
+
+    #
+    ordered_cycle_closed = ordered_cycle + [ordered_cycle[0]]
+    ordered_coordinates = [positions[cycle_node] for cycle_node in ordered_cycle_closed]
+
+    #
+    cycle_path = mpltPath.Path(vertices=ordered_coordinates, codes=None, closed=True, readonly=True)
+
+    #
+    remaining_nodes = [node for node in graph.nodes if node not in ordered_cycle]
+    in_side = cycle_path.contains_points([positions[node] for node in remaining_nodes])
+
+    #
+    return [node for index, node in enumerate(remaining_nodes) if in_side[index]]
+
+
+def identify_faces(faces, graph, positions):
+
+    # Identify the minimum cycle basis of the graph
+    cycles = [frozenset(cycle) for cycle in nx.minimum_cycle_basis(G=graph)]
+    ordered_edges = {cycle: get_ordered_edges(get_cycle_edges(cycle=cycle, graph=graph)) for cycle in cycles}
+    ordered_nodes = {cycle: get_vertex_sequence(edges=ordered_edges[cycle], is_ordered=True) for cycle in cycles}
+
+    #
+    for cycle in cycles:
+        if cycle in faces:
+            continue
+
+        #
+        nodes_inside_cycle = get_nodes_in_cycle(ordered_nodes[cycle], graph, positions)
+        if len(nodes_inside_cycle) == 0:
+            faces.add(cycle)
+        else:
+            print(f"nodes in cycle: {nodes_inside_cycle}")
+            nodes_inside_cycle += list(cycle)
+            print(f"nodes in cycle: {nodes_inside_cycle}")
+            sub_graph = graph.subgraph(nodes=list(set(nodes_inside_cycle))).copy()
+            print(f"cycle: {cycle} is fucked")
+            print(f"nodes in cycle:{nodes_inside_cycle}")
+            print(f"nodes inside subgraph: {sub_graph.nodes}")
+            input(f"length before: {len(graph.nodes)} and after {len(sub_graph.nodes)}")
+            prune_cycle_graph(cycle_edges=ordered_edges, graph=sub_graph)
+            sub_positions = {node: ordered_nodes.get(node) for node in nodes_inside_cycle}
+            identify_faces(faces, sub_graph, sub_positions)
+
+
+def get_sorted_face_vertices_from_cycle(ordered_cycle_nodes, original_vertices):
+    ordered_faces = []
+    for cycle, ordered_cycle_vertices in ordered_cycle_nodes.items():
+        print(f"ordered cycle vertices: {ordered_cycle_vertices}")
+        ordered_faces.append([vertex for vertex in ordered_cycle_vertices if vertex in original_vertices])
+        print(f"ordered filtered nodes: {ordered_faces[-1]}")
+    return ordered_faces
+
+
+def get_ordered_edges_from_ordered_vertices(ordered_vertices: []):
+    edges = [(None, None)] * len(ordered_vertices)
+    for index in range(0, len(ordered_vertices)):
+        edges[index] = (ordered_vertices[index], ordered_vertices[(index + 1) % len(ordered_vertices)])
+    return edges
+
+
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
 
@@ -352,12 +434,13 @@ if __name__ == '__main__':
     # Simulate Graph
     original_graph = nx.barabasi_albert_graph(n=n_vertices, m=m_edges, seed=seed)
     original_positions = nx.kamada_kawai_layout(G=original_graph)
-    draw_graph(graph=original_graph, positions=original_positions, output_path="./graph.png")
+    draw_graph(graph=original_graph, positions=original_positions, output_path="./original_graph.png")
 
     # Planarize Graph by removing edge crossings and replacing them with virtual vertices
     planar_graph, planar_positions = copy.deepcopy(original_graph), copy.deepcopy(original_positions)
     edge_crossings, vertex_crossings = locate_edge_crossings(graph=original_graph, positions=original_positions)
     virtual_edge_set = planarize_graph(graph=planar_graph, positions=planar_positions, edge_crossings=edge_crossings)
+    face_vertices = list(planar_graph.nodes)
     draw_graph(graph=planar_graph, positions=planar_positions, output_path="./planar_graph.png")
 
     #
@@ -374,22 +457,39 @@ if __name__ == '__main__':
     cycles = nx.minimum_cycle_basis(G=midpoint_graph)
     [print(f"cycle {cycle} - edges {order_cycle_vertices(cycle, midpoint_graph)}") for cycle in cycles]
 
-    #
-    problems = [cycle for cycle in cycles if is_cycle_empty(order_cycle_vertices(cycle, midpoint_graph), midpoint_graph, midpoint_positions)]
-    print(f"problems: {problems}")
+    # Identify Faces from Cycles
+    identified_faces = set()
+    identify_faces(faces=identified_faces, graph=midpoint_graph, positions=midpoint_positions)
+    print(f"identified faces: {identified_faces}")
 
     # Check Face Edge Counts
     outer_graph, outer_positions = copy.deepcopy(midpoint_graph), copy.deepcopy(midpoint_positions)
-    edge_counts = count_cycle_per_edge(cycles=cycles, graph=outer_graph)
+    edge_counts = count_cycle_per_edge(cycles=identified_faces, graph=outer_graph)
     for edge, count in edge_counts.items():
         if count == 2:
             edge = set(edge)
             outer_graph.remove_edge(u=edge.pop(), v=edge.pop())
     draw_graph(graph=outer_graph, positions=outer_positions, output_path="./outer_graph.png")
 
-    # Return Faces
-    ordered_face_vertices = get_faces(cycles=cycles, original_vertices=planar_vertices, graph=midpoint_graph)
-    print(f"Identified the following {len(ordered_face_vertices)} faces:")
-    [print(f"face: {face}") for face in ordered_face_vertices]
+    # Identify Each Face's Ordered Edge and Node List from the mid-point graph
+    unsorted_edges = {face: get_cycle_edges(cycle=face, graph=midpoint_graph) for face in identified_faces}
+    print(f"unsorted edges: {unsorted_edges}")
+    ordered_edges = {face: get_ordered_edges(unsorted_edges.get(face)) for face in identified_faces}
+    print(f"sorted edges: {ordered_edges}")
+    ordered_nodes = {face: get_vertex_sequence(edges=ordered_edges[face], is_ordered=True) for face in identified_faces}
+    print(f"ordered edges: {ordered_nodes}")
+
+    # Clean up Sorted Vertex and Edge lists from midpoint vertices
+    sorted_faces = get_sorted_face_vertices_from_cycle(ordered_cycle_nodes=ordered_nodes,
+                                                       original_vertices=face_vertices)
+    print(f"sorted faces: {sorted_faces}")
+
+    # Extract the faces, and their sorted edges and vertices
+    faces = set([frozenset(sorted_face) for sorted_face in sorted_faces])
+    sorted_face_vertices = {frozenset(face): face for face in sorted_faces}
+    sorted_face_edges = {frozenset(face): get_ordered_edges_from_ordered_vertices(face) for face in sorted_faces}
+
+    # Return Identified Faces and their sorted Edges
+    [print(f"{face} - {edges}") for face, edges in sorted_face_edges.items()]
 
 
