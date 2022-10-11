@@ -192,7 +192,7 @@ def connect_singleton_vertex_edges(graph, positions):
         graph.add_edge(u_of_edge=vertex,
                        v_of_edge=closest_target_vertex,
                        virtual=1)
-        print(f"connected {vertex} to {closest_target_vertex}")
+        print(f"Virtually connected {vertex} to {closest_target_vertex}")
         return connect_singleton_vertex_edges(graph, positions)
 
 
@@ -250,7 +250,10 @@ def get_cycle_edges(cycle, graph):
     # Count the degree of all vertices in the subgraph.
     degrees = {node: sub_graph.degree(node) for node in sub_graph.nodes}
     problem_nodes = set([node for node, degree in degrees.items() if degree > 2])
-    assert (len(problem_nodes) == 0), f"Not all vertices have degree of two: {problem_nodes}"
+
+    #
+    assert (len(problem_nodes) == 0), \
+        f"Not all vertices have degree of two: {problem_nodes}"
 
     # Return Edges as list of frozensets
     return [frozenset(edge) for edge in sub_graph.edges]
@@ -395,14 +398,8 @@ def identify_faces(faces, graph, positions):
         if len(nodes_inside_cycle) == 0:
             faces.add(cycle)
         else:
-            print(f"nodes in cycle: {nodes_inside_cycle}")
             nodes_inside_cycle += list(cycle)
-            print(f"nodes in cycle: {nodes_inside_cycle}")
             sub_graph = graph.subgraph(nodes=list(set(nodes_inside_cycle))).copy()
-            print(f"cycle: {cycle} is fucked")
-            print(f"nodes in cycle:{nodes_inside_cycle}")
-            print(f"nodes inside subgraph: {sub_graph.nodes}")
-            input(f"length before: {len(graph.nodes)} and after {len(sub_graph.nodes)}")
             prune_cycle_graph(cycle_edges=ordered_edges, graph=sub_graph)
             sub_positions = {node: ordered_nodes.get(node) for node in nodes_inside_cycle}
             identify_faces(faces, sub_graph, sub_positions)
@@ -411,9 +408,7 @@ def identify_faces(faces, graph, positions):
 def get_sorted_face_vertices_from_cycle(ordered_cycle_nodes, original_vertices):
     ordered_faces = []
     for cycle, ordered_cycle_vertices in ordered_cycle_nodes.items():
-        print(f"ordered cycle vertices: {ordered_cycle_vertices}")
         ordered_faces.append([vertex for vertex in ordered_cycle_vertices if vertex in original_vertices])
-        print(f"ordered filtered nodes: {ordered_faces[-1]}")
     return ordered_faces
 
 
@@ -475,7 +470,6 @@ if __name__ == '__main__':
     # Clean up Sorted Vertex and Edge lists from midpoint vertices
     sorted_faces = get_sorted_face_vertices_from_cycle(ordered_cycle_nodes=ordered_nodes,
                                                        original_vertices=face_vertices)
-    print(f"sorted faces: {sorted_faces}")
 
     # Extract the faces, and their sorted edges and vertices
     faces = set([frozenset(sorted_face) for sorted_face in sorted_faces])
